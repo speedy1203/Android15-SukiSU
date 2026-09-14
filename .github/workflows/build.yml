@@ -1,4 +1,4 @@
-name: Build Android 15 SukiSU Kernel
+name: Build Android 15 KernelSU Kernel
 
 on:
   workflow_dispatch:
@@ -8,52 +8,33 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git curl python3 bc bison flex \
-            build-essential ccache libssl-dev \
-            libelf-dev pahole zip unzip rsync lz4 cpio
-
-      - name: Clone Android 15 kernel
+      - name: Clone kernel
         run: |
           mkdir -p common
-          git clone --depth=1 \
-            --branch android15-6.6.50_r00 \
-            https://android.googlesource.com/kernel/common \
-            common/kernel
+          git clone --depth=1 --branch android15-6.6.50_r00 \
+            https://android.googlesource.com/kernel/common common/kernel
 
-      - name: Integrate SukiSU
+      - name: Integrate KernelSU
         working-directory: common/kernel
         run: |
           curl -LSs \
-            "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" \
+            "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" \
             | bash -s main
 
-      - name: Enable SukiSU
+      - name: Enable KernelSU
         working-directory: common/kernel
         run: |
-          echo "=== SukiSU config symbols ==="
-          grep -R "config KSU" -n KernelSU 2>/dev/null | head -10 || true
-
           echo "CONFIG_KSU=y" >> arch/x86/configs/gki_defconfig
+          echo "CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=y" >> arch/x86/configs/gki_defconfig
 
-          if grep -Rqs "config KSU_X86_PATCH_SYSCALL_DISPATCHER" KernelSU; then
-            echo "CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=y" >> arch/x86/configs/gki_defconfig
-          fi
-
-      - name: Clone Android kernel build system
+      - name: Clone build system
         run: |
           git clone --depth=1 \
-            https://android.googlesource.com/kernel/build \
-            build
+            https://android.googlesource.com/kernel/build build
 
-      - name: Get Android Clang
+      - name: Get Clang
         run: |
-          git clone --depth=1 \
-            --filter=blob:none \
-            --no-checkout \
+          git clone --depth=1 --filter=blob:none --no-checkout \
             --branch android15-release \
             https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
             prebuilts/clang/host/linux-x86
@@ -63,59 +44,29 @@ jobs:
           git sparse-checkout set clang-r510928
           git checkout
 
-      - name: Verify build environment
+      - name: Check
         run: |
-          echo "=== Kernel config ==="
           test -f common/kernel/build.config.gki.x86_64
-          echo "OK"
-
-          echo "=== Build system ==="
-          test -f build/build.sh
-          echo "OK"
-
-          echo "=== Clang ==="
-          test -x prebuilts/clang/host/linux-x86/clang-r510928/bin/clang
-          prebuilts/clang/host/linux-x86/clang-r510928/bin/clang --version | head -3
-
-          echo "=== SukiSU ==="
           test -d common/kernel/KernelSU
-          echo "OK"
+          find build -name build.sh -print | head
+          find prebuilts/clang -name clang -type f | head
 
-      - name: Build kernel
+      - name: Build
         run: |
           export PATH="$GITHUB_WORKSPACE/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"
-
           BUILD_CONFIG="$GITHUB_WORKSPACE/common/kernel/build.config.gki.x86_64" \
             bash "$GITHUB_WORKSPACE/build/build.sh" -j2
 
-      - name: Locate kernel
+      - name: Collect kernel
         run: |
-          echo "=== Kernel outputs ==="
-          find "$GITHUB_WORKSPACE" \
-            -type f \
-            \( -name "bzImage" -o -name "Image" -o -name "kernel" \) \
-            -printf "%p — %s bytes\n" \
-            | head -50
+          mkdir artifact
+          find common/kernel -type f \( -name bzImage -o -name Image \) \
+            -exec cp {} artifact/kernel-ranchu \;
+          ls -lh artifact
 
-      - name: Package kernel
-        run: |
-          mkdir -p artifact
-
-          if [ -f common/kernel/arch/x86/boot/bzImage ]; then
-            cp common/kernel/arch/x86/boot/bzImage artifact/kernel-ranchu
-          fi
-
-          if [ -f common/kernel/out/dist/bzImage ]; then
-            cp common/kernel/out/dist/bzImage artifact/kernel-ranchu
-          fi
-
-          cp common/kernel/arch/x86/configs/gki_defconfig artifact/gki_defconfig 2>/dev/null || true
-
-          ls -lh artifact/
-
-      - name: Upload kernel
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Android15-SukiSU-Kernel
+          name: Android15-KernelSU
           path: artifact/
           if-no-files-found: error
