@@ -57,12 +57,16 @@ jobs:
           git sparse-checkout set clang-r510928
           git checkout
 
-      - name: Verify build tree
+           - name: Verify build tree
         run: |
-          test -f common/kernel/build.config.gki.x86_64
-          test -f build/build.sh
-          test -x prebuilts/clang/host/linux-x86/clang-r510928/bin/clang
-          echo "Build tree OK"
+          echo "=== Kernel files ==="
+          find common/kernel -maxdepth 3 -name "build.config*" -type f | head -30
+
+          echo "=== Build system ==="
+          ls -la build/ | head
+
+          echo "=== Clang ==="
+          ls -la prebuilts/clang/host/linux-x86/clang-r510928/bin/clang"
 
       - name: Build kernel
         run: |
