@@ -36,11 +36,12 @@ jobs:
             https://android.googlesource.com/kernel/build \
             build
 
-      - name: Get Android Clang
+         - name: Get exact Clang version
+        working-directory: common/kernel
         run: |
-          git clone --depth=1 \
-            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
-            prebuilts/clang/host/linux-x86
+          grep -R "CLANG_VERSION" \
+            build.config* \
+            common 2>/dev/null | head -20
 
       - name: Check build configuration
         working-directory: common/kernel
