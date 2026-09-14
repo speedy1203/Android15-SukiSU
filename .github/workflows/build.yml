@@ -1,0 +1,45 @@
+name: Build Android 15 SukiSU Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git curl python3 bc bison flex \
+            build-essential ccache libssl-dev libelf-dev \
+            pahole zip unzip rsync
+
+      - name: Clone exact Android 15 kernel
+        run: |
+          git clone --depth=1 \
+            --branch android15-6.6.50_r00 \
+            https://android.googlesource.com/kernel/common \
+            kernel
+
+      - name: Integrate SukiSU
+        working-directory: kernel
+        run: |
+          curl -LSs \
+            "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" \
+            | bash -s main
+
+      - name: Show SukiSU integration
+        working-directory: kernel
+        run: |
+          test -d KernelSU
+          echo "SukiSU integration OK"
+          git status --short
+
+      - name: Build
+        working-directory: kernel
+        run: |
+          echo "Build step will be configured next"
