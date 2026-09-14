@@ -14,18 +14,17 @@ jobs:
           sudo apt-get install -y \
             git curl python3 bc bison flex \
             build-essential ccache libssl-dev \
-            libelf-dev pahole zip unzip rsync \
-            lz4 cpio
+            libelf-dev pahole zip unzip rsync lz4 cpio
 
-      - name: Clone kernel source
+      - name: Clone Android 15 kernel
         run: |
           git clone --depth=1 \
             --branch android15-6.6.50_r00 \
             https://android.googlesource.com/kernel/common \
-            kernel
+            common/kernel
 
       - name: Integrate SukiSU
-        working-directory: kernel
+        working-directory: common/kernel
         run: |
           curl -LSs \
             "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" \
@@ -35,38 +34,33 @@ jobs:
         run: |
           git clone --depth=1 \
             https://android.googlesource.com/kernel/build \
-            kernel-build
+            build
 
-      - name: Clone Android Clang
+      - name: Get Android Clang
         run: |
           git clone --depth=1 \
-            --branch android15-release \
             https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
-            clang
+            prebuilts/clang/host/linux-x86
 
-      - name: Prepare build tree
+      - name: Check build configuration
+        working-directory: common/kernel
         run: |
-          mkdir -p common
-          mv kernel common/
-          mv kernel-build build
-          mkdir -p prebuilts/clang/host/linux-x86
-          mv clang prebuilts/clang/host/linux-x86/
+          grep -E "CLANG_VERSION|CLANG_PREBUILT_BIN|HERMETIC_TOOLCHAIN" \
+            build.config.common || true
 
       - name: Build kernel
+        working-directory: common/kernel
         run: |
-          export PATH="$GITHUB_WORKSPACE/build-tools:$PATH"
-          BUILD_CONFIG="$GITHUB_WORKSPACE/common/kernel/build.config.gki.x86_64" \
+          BUILD_CONFIG=build.config.gki.x86_64 \
             bash "$GITHUB_WORKSPACE/build/build.sh" -j2
 
-      - name: Find kernel artifacts
+      - name: Locate kernel output
         run: |
-          find . -type f \( \
-            -name "Image" -o \
-            -name "Image.lz4" -o \
-            -name "vmlinux" \
-            \) -print
+          find "$GITHUB_WORKSPACE" -type f \
+            \( -name "Image" -o -name "Image.lz4" -o -name "vmlinux" \) \
+            -print
 
-      - name: Upload artifacts
+      - name: Upload kernel
         uses: actions/upload-artifact@v4
         with:
           name: android15-sukisu-kernel
