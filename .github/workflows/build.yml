@@ -8,15 +8,13 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git curl python3 bc bison flex \
-            build-essential ccache libssl-dev libelf-dev \
-            pahole zip unzip rsync
+          sudo apt-get install -y \
+            git curl python3 bc bison flex \
+            build-essential ccache libssl-dev \
+            libelf-dev pahole zip unzip rsync
 
       - name: Clone exact Android 15 kernel
         run: |
@@ -32,14 +30,14 @@ jobs:
             "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" \
             | bash -s main
 
-      - name: Show SukiSU integration
+      - name: Verify SukiSU
         working-directory: kernel
         run: |
           test -d KernelSU
-          echo "SukiSU integration OK"
-          git status --short
+          echo "SukiSU integration successful"
 
-      - name: Build
+      - name: Check kernel configuration
         working-directory: kernel
         run: |
-          echo "Build step will be configured next"
+          grep -E "CONFIG_KSU|CONFIG_KALLSYMS|CONFIG_CFI_CLANG" \
+            build.config.gki.x86_64 || true
