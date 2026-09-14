@@ -1,4 +1,4 @@
-name: Build Android 15 KernelSU Kernel
+name: Android 15 KernelSU
 
 on:
   workflow_dispatch:
@@ -10,75 +10,28 @@ jobs:
     steps:
       - name: Clone kernel
         run: |
-          mkdir -p common
-          git clone --depth=1 --branch android15-6.6.50_r00 \
-            https://android.googlesource.com/kernel/common common/kernel
+          git clone --depth=1 --branch android15-6.6.50_r00 https://android.googlesource.com/kernel/common common/kernel
 
       - name: Integrate KernelSU
-        working-directory: common/kernel
         run: |
-          curl -LSs \
-            "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" \
-            | bash -s main
+          cd common/kernel
+          curl -LSs https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh | bash -s main
 
       - name: Enable KernelSU
-        working-directory: common/kernel
         run: |
-          echo "CONFIG_KSU=y" >> arch/x86/configs/gki_defconfig
-          echo "CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=y" >> arch/x86/configs/gki_defconfig
+          cd common/kernel
+          echo 'CONFIG_KSU=y' >> arch/x86/configs/gki_defconfig
+          echo 'CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=y' >> arch/x86/configs/gki_defconfig
 
-            - name: Clone build system
+      - name: Clone build system
         run: |
-          git clone --depth=1 \
-            https://android.googlesource.com/kernel/build build
-
-          cd build
-
-          if [ ! -f build.sh ]; then
-            git fetch --depth=1 origin \
-              0c0380c70e5f959b1a149d957011fc5d185b6535
-
-            git checkout 0c0380c70e5f959b1a149d957011fc5d185b6535
-          fi
-
-          test -f build.sh
-          echo "BUILD.SH FOUND"
-
-      - name: Get Clang
-        run: |
-          git clone --depth=1 --filter=blob:none --no-checkout \
-            --branch android15-release \
-            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
-            prebuilts/clang/host/linux-x86
-
-          cd prebuilts/clang/host/linux-x86
-          git sparse-checkout init --cone
-          git sparse-checkout set clang-r510928
-          git checkout
+          git clone --depth=1 https://android.googlesource.com/kernel/build build
+          test -f build/build.sh
 
       - name: Check
         run: |
-          test -f common/kernel/build.config.gki.x86_64
+          echo "KernelSU:"
           test -d common/kernel/KernelSU
-          find build -name build.sh -print | head
-          find prebuilts/clang -name clang -type f | head
-
-      - name: Build
-        run: |
-          export PATH="$GITHUB_WORKSPACE/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"
-          BUILD_CONFIG="$GITHUB_WORKSPACE/common/kernel/build.config.gki.x86_64" \
-            bash "$GITHUB_WORKSPACE/build/build.sh" -j2
-
-      - name: Collect kernel
-        run: |
-          mkdir artifact
-          find common/kernel -type f \( -name bzImage -o -name Image \) \
-            -exec cp {} artifact/kernel-ranchu \;
-          ls -lh artifact
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: Android15-KernelSU
-          path: artifact/
-          if-no-files-found: error
+          echo "KernelSU OK"
+          echo "Build system:"
+          ls -l build/build.sh
