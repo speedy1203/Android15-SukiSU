@@ -14,9 +14,10 @@ jobs:
           sudo apt-get install -y \
             git curl python3 bc bison flex \
             build-essential ccache libssl-dev \
-            libelf-dev pahole zip unzip rsync
+            libelf-dev pahole zip unzip rsync \
+            lz4 cpio
 
-      - name: Clone exact Android 15 kernel
+      - name: Clone kernel source
         run: |
           git clone --depth=1 \
             --branch android15-6.6.50_r00 \
@@ -30,14 +31,47 @@ jobs:
             "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" \
             | bash -s main
 
-      - name: Verify SukiSU
-        working-directory: kernel
+      - name: Clone Android kernel build system
         run: |
-          test -d KernelSU
-          echo "SukiSU integration successful"
+          git clone --depth=1 \
+            https://android.googlesource.com/kernel/build \
+            kernel-build
 
-      - name: Check kernel configuration
-        working-directory: kernel
+      - name: Clone Android Clang
         run: |
-          grep -E "CONFIG_KSU|CONFIG_KALLSYMS|CONFIG_CFI_CLANG" \
-            build.config.gki.x86_64 || true
+          git clone --depth=1 \
+            --branch android15-release \
+            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
+            clang
+
+      - name: Prepare build tree
+        run: |
+          mkdir -p common
+          mv kernel common/
+          mv kernel-build build
+          mkdir -p prebuilts/clang/host/linux-x86
+          mv clang prebuilts/clang/host/linux-x86/
+
+      - name: Build kernel
+        run: |
+          export PATH="$GITHUB_WORKSPACE/build-tools:$PATH"
+          BUILD_CONFIG="$GITHUB_WORKSPACE/common/kernel/build.config.gki.x86_64" \
+            bash "$GITHUB_WORKSPACE/build/build.sh" -j2
+
+      - name: Find kernel artifacts
+        run: |
+          find . -type f \( \
+            -name "Image" -o \
+            -name "Image.lz4" -o \
+            -name "vmlinux" \
+            \) -print
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android15-sukisu-kernel
+          path: |
+            **/dist/**
+            **/Image
+            **/Image.lz4
+            **/vmlinux
