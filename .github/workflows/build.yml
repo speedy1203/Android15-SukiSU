@@ -34,8 +34,14 @@ jobs:
       - name: Enable SukiSU
         working-directory: common/kernel
         run: |
+          echo "=== SukiSU config symbols ==="
+          grep -R "config KSU" -n KernelSU 2>/dev/null | head -10 || true
+
           echo "CONFIG_KSU=y" >> arch/x86/configs/gki_defconfig
-          echo "CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=y" >> arch/x86/configs/gki_defconfig
+
+          if grep -Rqs "config KSU_X86_PATCH_SYSCALL_DISPATCHER" KernelSU; then
+            echo "CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=y" >> arch/x86/configs/gki_defconfig
+          fi
 
       - name: Clone Android kernel build system
         run: |
@@ -43,7 +49,7 @@ jobs:
             https://android.googlesource.com/kernel/build \
             build
 
-      - name: Get exact Clang
+      - name: Get Android Clang
         run: |
           git clone --depth=1 \
             --filter=blob:none \
@@ -57,33 +63,59 @@ jobs:
           git sparse-checkout set clang-r510928
           git checkout
 
-           - name: Verify build tree
+      - name: Verify build environment
         run: |
-          echo "=== Kernel files ==="
-          find common/kernel -maxdepth 3 -name "build.config*" -type f | head -30
+          echo "=== Kernel config ==="
+          test -f common/kernel/build.config.gki.x86_64
+          echo "OK"
 
           echo "=== Build system ==="
-          ls -la build/ | head
+          test -f build/build.sh
+          echo "OK"
 
           echo "=== Clang ==="
-          ls -la prebuilts/clang/host/linux-x86/clang-r510928/bin/clang"
+          test -x prebuilts/clang/host/linux-x86/clang-r510928/bin/clang
+          prebuilts/clang/host/linux-x86/clang-r510928/bin/clang --version | head -3
+
+          echo "=== SukiSU ==="
+          test -d common/kernel/KernelSU
+          echo "OK"
 
       - name: Build kernel
         run: |
+          export PATH="$GITHUB_WORKSPACE/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"
+
           BUILD_CONFIG="$GITHUB_WORKSPACE/common/kernel/build.config.gki.x86_64" \
             bash "$GITHUB_WORKSPACE/build/build.sh" -j2
 
-      - name: Find kernel
+      - name: Locate kernel
         run: |
-          find . -type f \( -name "bzImage" -o -name "Image" -o -name "kernel*" \) \
-            -printf '%p %s bytes\n' | head -50
+          echo "=== Kernel outputs ==="
+          find "$GITHUB_WORKSPACE" \
+            -type f \
+            \( -name "bzImage" -o -name "Image" -o -name "kernel" \) \
+            -printf "%p — %s bytes\n" \
+            | head -50
+
+      - name: Package kernel
+        run: |
+          mkdir -p artifact
+
+          if [ -f common/kernel/arch/x86/boot/bzImage ]; then
+            cp common/kernel/arch/x86/boot/bzImage artifact/kernel-ranchu
+          fi
+
+          if [ -f common/kernel/out/dist/bzImage ]; then
+            cp common/kernel/out/dist/bzImage artifact/kernel-ranchu
+          fi
+
+          cp common/kernel/arch/x86/configs/gki_defconfig artifact/gki_defconfig 2>/dev/null || true
+
+          ls -lh artifact/
 
       - name: Upload kernel
         uses: actions/upload-artifact@v4
         with:
-          name: android15-sukisu-kernel
-          path: |
-            common/kernel/arch/x86/boot/bzImage
-            common/kernel/arch/x86/boot/Image
-            common/kernel/out/**
-          if-no-files-found: warn
+          name: Android15-SukiSU-Kernel
+          path: artifact/
+          if-no-files-found: error
