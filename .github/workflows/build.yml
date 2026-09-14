@@ -27,10 +27,22 @@ jobs:
           echo "CONFIG_KSU=y" >> arch/x86/configs/gki_defconfig
           echo "CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=y" >> arch/x86/configs/gki_defconfig
 
-      - name: Clone build system
+            - name: Clone build system
         run: |
           git clone --depth=1 \
             https://android.googlesource.com/kernel/build build
+
+          cd build
+
+          if [ ! -f build.sh ]; then
+            git fetch --depth=1 origin \
+              0c0380c70e5f959b1a149d957011fc5d185b6535
+
+            git checkout 0c0380c70e5f959b1a149d957011fc5d185b6535
+          fi
+
+          test -f build.sh
+          echo "BUILD.SH FOUND"
 
       - name: Get Clang
         run: |
