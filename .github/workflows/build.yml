@@ -8,30 +8,67 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Clone kernel
+      - name: Install tools
         run: |
-          git clone --depth=1 --branch android15-6.6.50_r00 https://android.googlesource.com/kernel/common common/kernel
+          sudo apt-get update
+          sudo apt-get install -y git curl python3 bc bison flex \
+            build-essential libssl-dev libelf-dev pahole
+
+      - name: Clone Android 15 kernel
+        run: |
+          mkdir -p common
+          git clone --depth=1 \
+            --branch android15-6.6.50_r00 \
+            https://android.googlesource.com/kernel/common \
+            common/kernel
 
       - name: Integrate KernelSU
+        working-directory: common/kernel
         run: |
-          cd common/kernel
-          curl -LSs https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh | bash -s main
+          curl -LSs \
+            https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh \
+            | bash -s main
 
       - name: Enable KernelSU
+        working-directory: common/kernel
         run: |
-          cd common/kernel
           echo 'CONFIG_KSU=y' >> arch/x86/configs/gki_defconfig
           echo 'CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=y' >> arch/x86/configs/gki_defconfig
 
-      - name: Clone build system
-        run: |
-          git clone --depth=1 https://android.googlesource.com/kernel/build build
-          test -f build/build.sh
+          echo "=== KernelSU ==="
+          test -d KernelSU
+          grep -R "config KSU" KernelSU/kernel/Kconfig | head
 
-      - name: Check
+      - name: Get Android kernel build system
         run: |
-          echo "KernelSU:"
+          mkdir -p build
+          cd build
+
+          git init
+          git remote add origin https://android.googlesource.com/kernel/build
+
+          git fetch --depth=1 \
+            origin \
+            0c0380c70e5f959b1a149d957011fc5d185b6535
+
+          git checkout FETCH_HEAD
+
+          echo "=== Build system ==="
+          pwd
+          find . -maxdepth 3 -type f -name 'build.sh' -print
+
+      - name: Verify everything
+        run: |
+          echo "=== Kernel config ==="
+          test -f common/kernel/build.config.gki.x86_64
+          echo "OK"
+
+          echo "=== KernelSU ==="
           test -d common/kernel/KernelSU
-          echo "KernelSU OK"
-          echo "Build system:"
-          ls -l build/build.sh
+          echo "OK"
+
+          echo "=== build.sh ==="
+          test -f build/build.sh
+          echo "OK"
+
+          echo "=== ALL CHECKS PASSED ==="
