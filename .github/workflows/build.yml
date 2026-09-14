@@ -13,83 +13,74 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git curl python3 bc bison flex \
             build-essential libssl-dev libelf-dev pahole \
-            ccache rsync lz4 cpio zip unzip
+            rsync cpio lz4 zip unzip
 
       - name: Clone Android 15 kernel
         run: |
-          mkdir -p common
           git clone --depth=1 \
             --branch android15-6.6.50_r00 \
             https://android.googlesource.com/kernel/common \
-            common/kernel
+            common
 
-      - name: Integrate KernelSU
-        working-directory: common/kernel
+      - name: Clone Kleaf build system
+        run: |
+          mkdir -p build
+          git clone --depth=1 \
+            --branch main-kernel-build-2024 \
+            https://android.googlesource.com/kernel/build \
+            build/kernel
+
+      - name: Create Kleaf workspace files
+        run: |
+          cp build/kernel/kleaf/bazel.WORKSPACE WORKSPACE
+          cp build/kernel/kleaf/bazel.MODULE.bazel MODULE.bazel
+
+      - name: Integrate official KernelSU
+        working-directory: common
         run: |
           curl -LSs \
             https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh \
             | bash -s main
 
       - name: Enable KernelSU
-        working-directory: common/kernel
+        working-directory: common
         run: |
           echo 'CONFIG_KSU=y' >> arch/x86/configs/gki_defconfig
           echo 'CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=y' >> arch/x86/configs/gki_defconfig
 
-      - name: Get build system
-        run: |
-          mkdir -p build
-          cd build
-          git init
-          git remote add origin https://android.googlesource.com/kernel/build
-          git fetch --depth=1 origin 0c0380c70e5f959b1a149d957011fc5d185b6535
-          git checkout FETCH_HEAD
-
-      - name: Get Clang
-        run: |
-          git clone --depth=1 \
-            --filter=blob:none \
-            --no-checkout \
-            --branch android15-release \
-            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
-            prebuilts/clang/host/linux-x86
-
-          cd prebuilts/clang/host/linux-x86
-          git sparse-checkout init --cone
-          git sparse-checkout set clang-r510928
-          git checkout
-
       - name: Verify
         run: |
-          test -f common/kernel/build.config.gki.x86_64
-          test -f build/build.sh
-          test -x prebuilts/clang/host/linux-x86/clang-r510928/bin/clang
-          test -d common/kernel/KernelSU
-          echo "ALL BUILD COMPONENTS READY"
+          test -f common/BUILD.bazel
+          test -f common/build.config.gki.x86_64
+          test -f build/kernel/kleaf/bazel.sh
+          test -d common/KernelSU
+          echo "OFFICIAL KERNELSU + KLEAF READY"
 
-      - name: Build kernel
+      - name: Build x86_64 Kernel
         run: |
-          export PATH="$GITHUB_WORKSPACE/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"
+          chmod +x build/kernel/kleaf/bazel.sh
+          build/kernel/kleaf/bazel.sh build //common:kernel_x86_64
 
-          cd "$GITHUB_WORKSPACE"
-          BUILD_CONFIG=common/kernel/build.config.gki.x86_64 \
-            bash build/build.sh -j2
+      - name: Build distribution
+        if: success()
+        run: |
+          build/kernel/kleaf/bazel.sh run //common:kernel_x86_64_dist -- \
+            --destdir="$GITHUB_WORKSPACE/out/dist"
 
       - name: Find kernel
         if: always()
         run: |
-          echo "=== Kernel outputs ==="
+          echo "=== KERNEL OUTPUTS ==="
           find . -type f \
             \( -name bzImage -o -name Image \) \
             -printf '%p %s bytes\n' | head -50
 
-      - name: Upload kernel
+      - name: Upload KernelSU kernel
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Android15-KernelSU
+          name: Android15-KernelSU-x86_64
           path: |
-            common/kernel/arch/x86/boot/bzImage
-            common/kernel/arch/x86/boot/Image
-            common/kernel/out/dist/**
+            out/dist/**
+            bazel-bin/common/**
           if-no-files-found: warn
