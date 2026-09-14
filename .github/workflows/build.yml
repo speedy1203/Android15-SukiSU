@@ -71,8 +71,9 @@ jobs:
         run: |
           export PATH="$GITHUB_WORKSPACE/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"
 
-          BUILD_CONFIG="$GITHUB_WORKSPACE/common/kernel/build.config.gki.x86_64" \
-            bash "$GITHUB_WORKSPACE/build/build.sh" -j2
+          cd "$GITHUB_WORKSPACE"
+          BUILD_CONFIG=common/kernel/build.config.gki.x86_64 \
+            bash build/build.sh -j2
 
       - name: Find kernel
         if: always()
