@@ -18,6 +18,7 @@ jobs:
 
       - name: Clone Android 15 kernel
         run: |
+          mkdir -p common
           git clone --depth=1 \
             --branch android15-6.6.50_r00 \
             https://android.googlesource.com/kernel/common \
@@ -30,13 +31,19 @@ jobs:
             "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" \
             | bash -s main
 
+      - name: Enable SukiSU
+        working-directory: common/kernel
+        run: |
+          echo "CONFIG_KSU=y" >> arch/x86/configs/gki_defconfig
+          echo "CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=y" >> arch/x86/configs/gki_defconfig
+
       - name: Clone Android kernel build system
         run: |
           git clone --depth=1 \
             https://android.googlesource.com/kernel/build \
             build
 
-            - name: Get exact Clang
+      - name: Get exact Clang
         run: |
           git clone --depth=1 \
             --filter=blob:none \
@@ -46,33 +53,33 @@ jobs:
             prebuilts/clang/host/linux-x86
 
           cd prebuilts/clang/host/linux-x86
+          git sparse-checkout init --cone
           git sparse-checkout set clang-r510928
           git checkout
 
-      - name: Check build configuration
-        working-directory: common/kernel
+      - name: Verify build tree
         run: |
-          grep -E "CLANG_VERSION|CLANG_PREBUILT_BIN|HERMETIC_TOOLCHAIN" \
-            build.config.common || true
+          test -f common/kernel/build.config.gki.x86_64
+          test -f build/build.sh
+          test -x prebuilts/clang/host/linux-x86/clang-r510928/bin/clang
+          echo "Build tree OK"
 
       - name: Build kernel
-        working-directory: common/kernel
         run: |
-          BUILD_CONFIG=build.config.gki.x86_64 \
+          BUILD_CONFIG="$GITHUB_WORKSPACE/common/kernel/build.config.gki.x86_64" \
             bash "$GITHUB_WORKSPACE/build/build.sh" -j2
 
-      - name: Locate kernel output
+      - name: Find kernel
         run: |
-          find "$GITHUB_WORKSPACE" -type f \
-            \( -name "Image" -o -name "Image.lz4" -o -name "vmlinux" \) \
-            -print
+          find . -type f \( -name "bzImage" -o -name "Image" -o -name "kernel*" \) \
+            -printf '%p %s bytes\n' | head -50
 
       - name: Upload kernel
         uses: actions/upload-artifact@v4
         with:
           name: android15-sukisu-kernel
           path: |
-            **/dist/**
-            **/Image
-            **/Image.lz4
-            **/vmlinux
+            common/kernel/arch/x86/boot/bzImage
+            common/kernel/arch/x86/boot/Image
+            common/kernel/out/**
+          if-no-files-found: warn
