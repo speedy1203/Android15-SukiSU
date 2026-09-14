@@ -36,12 +36,18 @@ jobs:
             https://android.googlesource.com/kernel/build \
             build
 
-         - name: Get exact Clang version
-        working-directory: common/kernel
+            - name: Get exact Clang
         run: |
-          grep -R "CLANG_VERSION" \
-            build.config* \
-            common 2>/dev/null | head -20
+          git clone --depth=1 \
+            --filter=blob:none \
+            --no-checkout \
+            --branch android15-release \
+            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
+            prebuilts/clang/host/linux-x86
+
+          cd prebuilts/clang/host/linux-x86
+          git sparse-checkout set clang-r510928
+          git checkout
 
       - name: Check build configuration
         working-directory: common/kernel
